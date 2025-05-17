@@ -5,9 +5,14 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "tsx src/server.ts",
+    "build": "tsc",
   },
   "dependencies": {
     "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
   }
-} 
+}

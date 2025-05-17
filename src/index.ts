@@ -17,7 +17,8 @@ function clearDebug() {
 document.getElementById("runButton").addEventListener("click", function () {
     try {
         clearDebug();
-        const inputCode = document.getElementById("input").value;
+        // const inputCode = document.getElementById("input").value;
+        const inputCode = (document.getElementById("input") as HTMLInputElement).value;
         updateDebug(`Input code: ${inputCode}`);
 
         const compiledCode = compiler(inputCode);
@@ -28,12 +29,17 @@ document.getElementById("runButton").addEventListener("click", function () {
         updateDebug(`Execution result: ${executionResult}`);
 
         // Display the execution result in the output textarea
-        const outputElement = document.getElementById("output");
+        // const outputElement = document.getElementById("output");
+        // outputElement.value = executionResult !== null ? executionResult : "Error during code execution";
+
+        const outputElement = document.getElementById("output") as HTMLInputElement;
         outputElement.value = executionResult !== null ? executionResult : "Error during code execution";
 
     } catch (error) {
         console.error("Error:", error);
         updateDebug(`Error: ${error.message}`);
-        document.getElementById("output").value = `Error: ${error.message}`;
+        // document.getElementById("output").value = `Error: ${error.message}`;
+        const outputElement = document.getElementById("output") as HTMLInputElement;
+        outputElement.value = `Error: ${error.message}`;
     }
 }); 
