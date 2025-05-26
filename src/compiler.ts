@@ -1,3 +1,6 @@
+import { parse } from "dotenv";
+import { Stack } from "./lib/Stack";
+
 const tokenizer = (input) => {
   const tokens = [];
   let cursor = 0;
@@ -5,6 +8,12 @@ const tokenizer = (input) => {
   while (cursor < input.length) {
     let char = input[cursor];
 
+    // Method-call dot (only when it is **not** part of a number like 3.14)
+    if (char === ".") {
+      tokens.push({ type: "operator", value: "." });
+      cursor++;
+      continue;
+    }
     // Brackets for arrays
     if (char === "[" || char === "]") {
       tokens.push({ type: "punctuation", value: char });
@@ -229,8 +238,56 @@ const parser = (tokens) => {
     return parseValue();
   }
 
+  function parseMethodCall() {
+    // object name  (e.g. 's')
+    const objectName = tokens[current].value;
+    current += 2; // skip  identifier  &  '.'
+
+    // method name
+    if (tokens[current]?.type !== "identifier")
+      throw new Error("Expected method name after '.'");
+    const methodName = tokens[current].value;
+    current++; // skip method name
+
+    // (
+    if (tokens[current]?.value !== "(")
+      throw new Error("Expected '(' after method name");
+    current++; // skip '('
+
+    // arguments
+    const args = [];
+    while (tokens[current] && tokens[current].value !== ")") {
+      args.push(parseExpression());
+      if (tokens[current]?.value === ",") current++; // skip commas
+    }
+
+    if (tokens[current]?.value !== ")")
+      throw new Error("Expected ')' to close argument list");
+    current++; // skip ')'
+
+    return { type: "MethodCall", object: objectName, method: methodName, args };
+  }
+
   function parseValue() {
     const token = tokens[current];
+
+    if (
+      token.type === "identifier" &&
+      token.value === "Stack" &&
+      tokens[current + 1] &&
+      tokens[current + 1].type === "punctuation" &&
+      tokens[current + 1].value === "(" &&
+      tokens[current + 2] &&
+      tokens[current + 2].type === "punctuation" &&
+      tokens[current + 2].value === ")"
+    ) {
+      current += 3; // Skip "Stack ( )"
+      return {
+        type: "CallExpression",
+        name: "Stack",
+        args: [],
+      };
+    }
 
     if (token.type === "number" || token.type === "float") {
       current++;
@@ -240,6 +297,16 @@ const parser = (tokens) => {
     if (token.type === "string") {
       current++;
       return token;
+    }
+
+    // s.push(...),  s.pop()  etc.
+    if (
+      token.type === "identifier" &&
+      tokens[current + 1] &&
+      tokens[current + 1]?.type === "operator" &&
+      tokens[current + 1].value === "."
+    ) {
+      return parseMethodCall();
     }
 
     if (token.type === "identifier") {
@@ -279,6 +346,7 @@ const parser = (tokens) => {
     if (token.type === "punctuation" && token.value === "[") {
       return parseArrayLiteral();
     }
+    console.error("Unhandled token in parseValue():", token);
 
     throw new Error(`Unexpected token: ${token.value}`);
   }
@@ -574,7 +642,9 @@ const parser = (tokens) => {
 
     // Expect type (like int or int[])
     const typeToken = tokens[current];
-    if (!["int", "float", "char", "string"].includes(typeToken.value)) {
+    if (
+      !["int", "float", "char", "string", "Stack"].includes(typeToken.value)
+    ) {
       throw new Error("Expected type after 'set'");
     }
 
@@ -705,6 +775,23 @@ const parser = (tokens) => {
       }
     }
 
+    // Handle method calls like s.push(100); as standalone statements
+    if (
+      token.type === "identifier" &&
+      tokens[current + 1]?.type === "operator" &&
+      tokens[current + 1].value === "."
+    ) {
+      const callNode = parseMethodCall();
+
+      if (tokens[current]?.type === "semicolon") {
+        current++; // Skip semicolon
+      }
+      return {
+        type: "ExpressionStatement",
+        expression: callNode,
+      };
+    }
+
     if (token.type === "identifier") {
       return parseAssignment();
     }
@@ -729,52 +816,78 @@ const codeGen = (node) => {
     case "Program":
       const statements = node.body.map(codeGen);
       return `
-          let __output = [];
-          
-          // Input helper function
-          function __getInput(promptStr) {
-            const value = prompt(promptStr);
-            if (value === null) {
-              throw new Error("No input provided");
-            }
-            return value;
-          }
-          
-          // Error handling helper functions
-          function __checkDivisionByZero(a, b, op) {
-            if ((op === '/' || op === '%') && b === 0) {
-              throw new Error('Division by zero');
-            }
-            return true;
-          }
+      class Stack {
+        constructor() {
+          this.items = [];
+        }
+        push(item) {
+          this.items.push(item);
+        }
+        pop() {
+          if (this.items.length === 0) throw new Error("Stack underflow");
+          return this.items.pop();
+        }
+        peek() {
+          return this.items[this.items.length - 1];
+        }
+        isEmpty() {
+          return this.items.length === 0;
+        }
+        size() {
+          return this.items.length;
+        }
+      }
 
-          function __safeEval(left, op, right) {
-            __checkDivisionByZero(left, right, op);
-            
-            // Type checking
-            if (typeof left !== 'number' || typeof right !== 'number') {
-              throw new Error('Arithmetic operations can only be performed on numbers');
-            }
+      let __output = [];
 
-            switch(op) {
-              case '+': return left + right;
-              case '-': return left - right;
-              case '*': return left * right;
-              case '/': return left / right;
-              case '%': return left % right;
-              default: throw new Error('Unknown operator: ' + op);
-            }
-          }
+      // Input helper function
+      function __getInput(promptStr) {
+        const value = prompt(promptStr);
+        if (value === null) {
+          throw new Error("No input provided");
+        }
+        return value;
+      }
 
-          ${statements.join("\n")}
-          return __output;
-        `;
+      // Error handling helper functions
+      function __checkDivisionByZero(a, b, op) {
+        if ((op === '/' || op === '%') && b === 0) {
+          throw new Error('Division by zero');
+        }
+        return true;
+      }
+
+      function __safeEval(left, op, right) {
+        __checkDivisionByZero(left, right, op);
+        if (typeof left !== 'number' || typeof right !== 'number') {
+          throw new Error('Arithmetic operations can only be performed on numbers');
+        }
+        switch(op) {
+          case '+': return left + right;
+          case '-': return left - right;
+          case '*': return left * right;
+          case '/': return left / right;
+          case '%': return left % right;
+          default: throw new Error('Unknown operator: ' + op);
+        }
+      }
+
+      ${statements.join("\n")}
+      return __output;
+    `;
 
     case "VariableDeclaration":
+      if (
+        node.varType === "Stack" &&
+        node.value.type === "CallExpression" &&
+        node.value.name === "Stack"
+      ) {
+        return `let ${node.name} = new Stack();`;
+      }
       let declaration = `let ${node.name} = `;
 
       if (node.value.type === "ArrayExpression") {
-        declaration += codeGen(node.value); // ✅ Fix: generate array code
+        declaration += codeGen(node.value); // generate array code
       } else if (node.value.type === "BinaryExpression") {
         declaration += codeGen(node.value);
       } else if (node.value.type === "InputExpression") {
@@ -905,6 +1018,13 @@ const codeGen = (node) => {
 
     case "AccessExpression":
       return `${node.name}[${codeGen(node.index)}]`;
+
+    case "MethodCall":
+      const methodArgs = node.args.map(codeGen).join(", ");
+      return `${node.object}.${node.method}(${methodArgs})`;
+
+    case "ExpressionStatement":
+      return codeGen(node.expression) + ";";
 
     default:
       if (

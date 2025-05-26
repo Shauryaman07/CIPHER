@@ -7,12 +7,13 @@
   "scripts": {
     "start": "node server.js",
     "dev": "tsx src/server.ts",
-    "build": "tsc",
+    "build": "tsc"
   },
   "dependencies": {
     "express": "^4.18.2"
   },
   "devDependencies": {
+    "tsx": "^4.19.4",
     "typescript": "^5.8.3"
   }
 }
