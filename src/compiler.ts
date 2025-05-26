@@ -1,4 +1,4 @@
-import { parse } from "dotenv";
+import { FenwickTree } from "./lib/FenwickTree";
 import { Stack } from "./lib/Stack";
 
 const tokenizer = (input) => {
@@ -271,6 +271,34 @@ const parser = (tokens) => {
   function parseValue() {
     const token = tokens[current];
 
+    // Handle FenwickTree initialization
+    if (
+      token.type === "identifier" &&
+      token.value === "FenwickTree" &&
+      tokens[current + 1]?.value === "(" &&
+      tokens[current + 2] &&
+      tokens[current + 3]?.value === ")"
+    ) {
+      current++; // skip "FenwickTree"
+      if (tokens[current]?.value !== "(") {
+        throw new Error("Expected '(' after FenwickTree");
+      }
+      current++; // skip '('
+
+      const arg = parseExpression();
+
+      if (tokens[current]?.value !== ")") {
+        throw new Error("Expected ')' after FenwickTree argument");
+      }
+      current++; // skip ')'
+
+      return {
+        type: "CallExpression",
+        name: "FenwickTree",
+        args: [arg],
+      };
+    }
+    // Handle Queue and Stack initialization
     if (
       token.type === "identifier" &&
       token.value === "Queue" &&
@@ -659,9 +687,15 @@ const parser = (tokens) => {
     // Expect type (like int or int[])
     const typeToken = tokens[current];
     if (
-      !["int", "float", "char", "string", "Stack", "Queue"].includes(
-        typeToken.value
-      )
+      ![
+        "int",
+        "float",
+        "char",
+        "string",
+        "Stack",
+        "Queue",
+        "FenwickTree",
+      ].includes(typeToken.value)
     ) {
       throw new Error("Expected type after 'set'");
     }
@@ -835,6 +869,35 @@ const codeGen = (node) => {
       const statements = node.body.map(codeGen);
       return `
 
+      class FenwickTree {
+        constructor(size) {
+          this.size = size;
+          this.tree = new Array(size + 1).fill(0);
+        }
+  
+        update(index, value) {
+          index++;
+          while (index <= this.size) {
+            this.tree[index] += value;
+            index += index & -index;
+          }
+        }
+  
+        query(index) {
+          index++;
+          let sum = 0;
+          while (index > 0) {
+            sum += this.tree[index];
+            index -= index & -index;
+          }
+          return sum;
+        }
+        rangeQuery(left, right) {
+          return this.query(right) - this.query(left - 1);
+        }
+      }
+
+
       class Queue {
         constructor() {
           this.items = [];
@@ -918,6 +981,17 @@ const codeGen = (node) => {
     `;
 
     case "VariableDeclaration":
+      // Handle FenwickTree initialization
+      if (
+        node.varType === "FenwickTree" &&
+        node.value.type === "CallExpression" &&
+        node.value.name === "FenwickTree"
+      ) {
+        return `let ${node.name} = new FenwickTree(${codeGen(
+          node.value.args[0]
+        )});`;
+      }
+
       // Handle Queue and Stack initialization
       if (
         node.varType === "Queue" &&
