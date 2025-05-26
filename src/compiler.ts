@@ -273,6 +273,22 @@ const parser = (tokens) => {
 
     if (
       token.type === "identifier" &&
+      token.value === "Queue" &&
+      tokens[current + 1]?.type === "punctuation" &&
+      tokens[current + 1].value === "(" &&
+      tokens[current + 2]?.type === "punctuation" &&
+      tokens[current + 2].value === ")"
+    ) {
+      current += 3;
+      return {
+        type: "CallExpression",
+        name: "Queue",
+        args: [],
+      };
+    }
+
+    if (
+      token.type === "identifier" &&
       token.value === "Stack" &&
       tokens[current + 1] &&
       tokens[current + 1].type === "punctuation" &&
@@ -643,7 +659,9 @@ const parser = (tokens) => {
     // Expect type (like int or int[])
     const typeToken = tokens[current];
     if (
-      !["int", "float", "char", "string", "Stack"].includes(typeToken.value)
+      !["int", "float", "char", "string", "Stack", "Queue"].includes(
+        typeToken.value
+      )
     ) {
       throw new Error("Expected type after 'set'");
     }
@@ -816,6 +834,29 @@ const codeGen = (node) => {
     case "Program":
       const statements = node.body.map(codeGen);
       return `
+
+      class Queue {
+        constructor() {
+          this.items = [];
+        }
+        enqueue(item) {
+          this.items.push(item);
+        }
+        dequeue() {
+          if (this.items.length === 0) throw new Error("Queue underflow");
+          return this.items.shift();
+        }
+        front() {
+          return this.items[0];
+        }
+        isEmpty() {
+          return this.items.length === 0;
+        }
+        size() {
+          return this.items.length;
+        }
+      }
+
       class Stack {
         constructor() {
           this.items = [];
@@ -877,6 +918,15 @@ const codeGen = (node) => {
     `;
 
     case "VariableDeclaration":
+      // Handle Queue and Stack initialization
+      if (
+        node.varType === "Queue" &&
+        node.value.type === "CallExpression" &&
+        node.value.name === "Queue"
+      ) {
+        return `let ${node.name} = new Queue();`;
+      }
+
       if (
         node.varType === "Stack" &&
         node.value.type === "CallExpression" &&
